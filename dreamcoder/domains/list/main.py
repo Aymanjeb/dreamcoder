@@ -5,6 +5,10 @@ import math
 import os
 import datetime
 
+
+from dreamcoder.dreaming import *
+
+
 from dreamcoder.dreamcoder import explorationCompression
 from dreamcoder.utilities import eprint, flatten, testTrainSplit
 from dreamcoder.grammar import Grammar
@@ -13,6 +17,7 @@ from dreamcoder.type import Context, arrow, tbool, tlist, tint, t0, UnificationF
 from dreamcoder.domains.list.listPrimitives import basePrimitives, primitives, McCarthyPrimitives, bootstrapTarget_extra, no_length
 from dreamcoder.recognition import RecurrentFeatureExtractor
 from dreamcoder.domains.list.makeListTasks import make_list_bootstrap_tasks, sortBootstrap, EASYLISTTASKS
+from dreamcoder.dreaming import *
 
 
 def retrieveJSONTasks(filename, features=False):
@@ -407,4 +412,6 @@ def main(args):
         train = tasks
         test = []
 
+    
+    print(len(baseGrammar))
     explorationCompression(baseGrammar, train, testingTasks=test, **args)

@@ -4,7 +4,7 @@ from dreamcoder.domains.text.textPrimitives import primitives
 from dreamcoder.domains.list.listPrimitives import bootstrapTarget
 from dreamcoder.recognition import *
 from dreamcoder.enumeration import *
-
+from dreamcoder.dreaming import *
 import os
 import datetime
 import random
@@ -268,6 +268,7 @@ def main(arguments):
     timestamp = datetime.datetime.now().isoformat()
     outputDirectory = "experimentOutputs/text/%s"%timestamp
     os.system("mkdir -p %s"%outputDirectory)
+    print(len(baseGrammar))
 
     generator = ecIterator(baseGrammar, train,
                            testingTasks=test + challenge,

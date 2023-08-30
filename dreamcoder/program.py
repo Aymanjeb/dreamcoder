@@ -754,7 +754,7 @@ class Invented(Program):
             return Invented(b),n
         
         raise ParseFailure(s)
-        
+ 
 
 class FragmentVariable(Program):
     def __init__(self): pass

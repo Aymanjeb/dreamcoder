@@ -16,6 +16,8 @@ import numpy as np
 # luke
 import json
 
+#Code I've added
+from torchsummary import summary
 
 def variable(x, volatile=False, cuda=False):
     if isinstance(x, list):
@@ -64,6 +66,7 @@ class GrammarNetwork(nn.Module):
     """Neural network that outputs a grammar"""
     def __init__(self, inputDimensionality, grammar):
         super(GrammarNetwork, self).__init__()
+
         self.logProductions = nn.Linear(inputDimensionality, len(grammar)+1)
         self.grammar = grammar
         
@@ -695,14 +698,16 @@ class RecognitionModel(nn.Module):
             activation = nn.Tanh
         else:
             raise Exception('Unknown activation function ' + str(activation))
-            
+        eprint("hidden",hidden)
+        eprint("feature_dimensions",self.feature_dimensions )     
         self._MLP = nn.Sequential(*[ layer
                                      for j in range(len(hidden))
                                      for layer in [
                                              nn.Linear(([self.feature_dimensions] + hidden)[j],
                                                        hidden[j]),
                                              activation()]])
-
+        total_params = sum(p.numel() for p in self._MLP.parameters() if p.requires_grad)
+        eprint("total_params", total_params)
         self.entropy = Entropy()
 
         if len(hidden) > 0:
@@ -722,7 +727,7 @@ class RecognitionModel(nn.Module):
         
         self.grammar = ContextualGrammar.fromGrammar(grammar) if contextual else grammar
         self.generativeModel = grammar
-        
+        #replace len(self.grammar.primitives) with 100 when removing concepts
         self._auxiliaryPrediction = nn.Linear(self.feature_dimensions, len(self.grammar.primitives))
         self._auxiliaryLoss = nn.BCEWithLogitsLoss()
 
@@ -751,8 +756,12 @@ class RecognitionModel(nn.Module):
         ls = frontier.bestPosterior.program
         def uses(summary):
             if hasattr(summary, 'uses'): 
-                return torch.tensor([ float(int(p in summary.uses))
+                #return torch.tensor([ float(int(p in summary.uses))
+                #        for p in self.generativeModel.primitives ])
+                return torch.tensor([ float(int(np.sum(np.array([str(p) in str(d) for d in summary.uses.keys()]))>=1))
                                       for p in self.generativeModel.primitives ])
+            #add this to remove concepts
+            """if "#" not in str(p)"""
             assert hasattr(summary, 'noParent')
             u = uses(summary.noParent) + uses(summary.variableParent)
             for ss in summary.library.values():
@@ -761,6 +770,20 @@ class RecognitionModel(nn.Module):
             return u
         u = uses(ls)
         u[u > 1.] = 1.
+        from datetime import datetime
+
+            # Get the current time
+
+
+        current_time = datetime.now()
+        current_time_without_minutes = current_time.replace(minute=0, second=0, microsecond=0)
+
+        file_path = f"all_results/NN_results/true_predictions_{current_time_without_minutes}.txt"
+        with open(file_path, 'a') as file:
+            nb_lines = count_lines(file_path)
+            if nb_lines<30000:
+                file.write(f"task: {frontier.task}\n")
+                file.write(f"true predictions: {u}\n")
         if self.use_cuda: u = u.cuda()
         al = self._auxiliaryLoss(self._auxiliaryPrediction(features), u)
         return al
@@ -905,6 +928,7 @@ class RecognitionModel(nn.Module):
             g = self(features)
             return - entry.program.logLikelihood(g), al
         else:
+
             features = self._MLP(features).expand(1, features.size(-1))
             ll = self.grammarBuilder.batchedLogLikelihoods(features, [entry.program]).view(-1)
             return -ll, al
@@ -1195,11 +1219,24 @@ class RecognitionModel(nn.Module):
         # Should only affect performance and shouldn't affect anything else
         helmholtzSamples = []
 
+        total_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        eprint("total_params_train", total_params)
+
+
+
         optimizer = torch.optim.Adam(self.parameters(), lr=lr, eps=1e-3, amsgrad=True)
         start = time.time()
         losses, descriptionLengths, realLosses, dreamLosses, realMDL, dreamMDL = [], [], [], [], [], []
         classificationLosses = []
+	
+	######
+        save_losses = []
+        save_auxiliary_losses = []
+	########
+
         totalGradientSteps = 0
+        for frontier in frontiers:
+            break
         for i in range(1, epochs + 1):
             if timeout and time.time() - start > timeout:
                 break
@@ -1223,6 +1260,7 @@ class RecognitionModel(nn.Module):
                 loss, classificationLoss = \
                         self.frontierBiasOptimal(frontier, auxiliary=auxLoss, vectorized=vectorized) if biasOptimal \
                         else self.frontierKL(frontier, auxiliary=auxLoss, vectorized=vectorized)
+
                 if loss is None:
                     if not dreaming:
                         eprint("ERROR: Could not extract features during experience replay.")
@@ -1259,10 +1297,18 @@ class RecognitionModel(nn.Module):
                 eprint("(ID=%d): " % self.id, "\t%d cumulative gradient steps. %f steps/sec"%(totalGradientSteps,
                                                                        totalGradientSteps/(time.time() - start)))
                 eprint("(ID=%d): " % self.id, "\t%d-way auxiliary classification loss"%len(self.grammar.primitives),sum(classificationLosses)/len(classificationLosses))
+                save_losses.append(mean(losses))
+                save_auxiliary_losses.append(sum(classificationLosses)/len(classificationLosses))
                 losses, descriptionLengths, realLosses, dreamLosses, realMDL, dreamMDL = [], [], [], [], [], []
                 classificationLosses = []
                 gc.collect()
-        
+	#######
+        file_path = f"losses.txt"
+        with open(file_path, 'a') as file:                
+            file.write(f"save losses: {save_losses}")
+            file.write('\n')  
+            file.write(f"save_auxiliary_losses:{save_auxiliary_losses}")
+	#######
         eprint("(ID=%d): " % self.id, " Trained recognition model in",time.time() - start,"seconds")
         self.trained=True
         return self
@@ -1338,6 +1384,29 @@ class RecognitionModel(nn.Module):
                         for task in tasks}
             #untorch seperately to make sure you filter out None grammars
             grammars = {task: grammar.untorch() for task, grammar in grammars.items() if grammar is not None}
+            
+            from datetime import datetime
+
+            # Get the current time
+            
+            current_time = datetime.now()
+
+            file_path = f"all_results/NN_results/predictions_{current_time}.txt"
+            with open(file_path, 'a') as file:
+                
+                file.write(f"primitives = {self.generativeModel.primitives}")
+                file.write('\n')  
+
+                for task in grammars.keys():
+                    features = self.encode_features(task)
+                    predictions = self._auxiliaryPrediction(features)
+
+                    file.write(f"task name {task.name}")
+                    file.write('\n')
+                    file.write(f"{grammars[task]}")
+                    file.write('\n')
+                    file.write(f"predictions = {torch.sigmoid(predictions)}")
+                    file.write('\n') 
 
         return multicoreEnumeration(grammars, tasks,
                                     testing=testing,
@@ -1746,3 +1815,15 @@ class JSONFeatureExtractor(object):
         #return [(self.stringify(inputs), self.stringify(output))
         #        for (inputs, output) in t.examples]
         return [(list(output),) for (inputs, output) in t.examples]
+
+
+def count_lines(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            line_count = 0
+            for line in file:
+                line_count += 1
+        return line_count
+    except FileNotFoundError:
+        print("File not found.")
+        return 0

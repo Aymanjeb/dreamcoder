@@ -192,8 +192,8 @@ def multicoreEnumeration(g, tasks, _=None,
             # Mark the CPUs is no longer being used and pause the stopwatch
             activeCPUs -= id2CPUs[message.ID]
             stopwatches[id2job[message.ID]].stop()
-
             newFrontiers, searchTimes, pc = message.value
+
             for t, f in newFrontiers.items():
                 oldBest = None if len(
                     frontiers[t]) == 0 else frontiers[t].bestPosterior
@@ -224,7 +224,7 @@ def multicoreEnumeration(g, tasks, _=None,
 
     eprint("We enumerated this many programs, for each task:\n\t",
            list(taskToNumberOfPrograms.values()))
-
+    print
     return [frontiers[t] for t in tasks], bestSearchTime
 
 def wrapInThread(f):
@@ -347,6 +347,10 @@ def solveForTask_ocaml(_=None,
     searchTimes = {}
     for t in tasks:
         solutions = response[t.name]
+        
+        L = [escape_tokens(e.get("tokens", "")).split() for e in solutions]
+
+
         frontier = Frontier([FrontierEntry(program=p,
                                            logLikelihood=e["logLikelihood"],
                                            tokens=escape_tokens(e.get("tokens", "")).split(),
@@ -394,7 +398,10 @@ def solveForTask_python(_=None,
                         timeout=None,
                         CPUs=1,
                         likelihoodModel=None,
-                        evaluationTimeout=None, maximumFrontiers=None, testing=False,unigramGrammar=None):
+                        evaluationTimeout=None, 
+                        maximumFrontiers=None, 
+                        testing=False,unigramGrammar=None,
+                        max_mem_per_enumeration_thread=1000000):
     return enumerateForTasks(g, tasks, likelihoodModel,
                              timeout=timeout,
                              testing=testing,
@@ -446,18 +453,17 @@ def enumerateForTasks(g, tasks, likelihoodModel, _=None,
                                              maximumDepth=99,
                                              upperBound=budget,
                                              lowerBound=previousBudget):
+                
                 descriptionLength = -prior
                 # Shouldn't see it on this iteration
                 assert descriptionLength <= budget
                 # Should already have seen it
                 assert descriptionLength > previousBudget
-
                 numberOfPrograms += 1
                 totalNumberOfPrograms += 1
 
                 for n in range(len(tasks)):
                     task = tasks[n]
-
                     #Warning:changed to max's new likelihood model situation
                     #likelihood = task.logLikelihood(p, evaluationTimeout)
                     #if invalid(likelihood):
@@ -465,7 +471,7 @@ def enumerateForTasks(g, tasks, likelihoodModel, _=None,
                     success, likelihood = likelihoodModel.score(p, task)
                     if not success:
                         continue
-                        
+  
                     dt = time() - starting + elapsedTime
                     priority = -(likelihood + prior)
                     hits[n].push(priority,
@@ -474,7 +480,6 @@ def enumerateForTasks(g, tasks, likelihoodModel, _=None,
                                                     logPrior=prior)))
                     if len(hits[n]) > maximumFrontiers[n]:
                         hits[n].popMaximum()
-
                 if timeout is not None and time() - starting > timeout:
                     raise EnumerationTimeout
 

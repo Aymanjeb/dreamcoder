@@ -299,7 +299,7 @@ class Grammar(object):
         candidates = self.buildCandidates(request, context, environment,
                                           normalize=False,
                                           returnTable=True)
-
+    
         # A list of everything that would have been possible to use here
         possibles = [p for p in candidates.keys() if not p.isIndex]
         numberOfVariables = sum(p.isIndex for p in candidates.keys())
@@ -540,6 +540,7 @@ class Grammar(object):
                                               lowerBound=lowerBound + l,
                                               maximumDepth=maximumDepth - 1):
                     yield aL + l, aK, application
+        
 
     def enumerateApplication(self, context, environment,
                              function, argumentRequests,

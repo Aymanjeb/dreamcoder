@@ -93,7 +93,7 @@ class Task(object):
                     try:
                         p = self.predict(f, x)
                     except BaseException as err:
-                        print("Err during evaluation" + str(err))
+                        #print("Err during evaluation" + str(err))
                         p = None
                     if self.cache:
                         EVALUATIONTABLE[(x, e)] = p
@@ -117,7 +117,7 @@ class Task(object):
 
     def logLikelihood(self, e, timeout=None):
         if self.check(e, timeout):
-            return 0.0
+            return 00.
         else:
             return NEGATIVEINFINITY
 

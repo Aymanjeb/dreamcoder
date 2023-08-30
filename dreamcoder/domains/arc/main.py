@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from dreamcoder.dreaming import helmholtzEnumeration
+from dreamcoder.dreaming import *
 from dreamcoder.dreamcoder import explorationCompression, sleep_recognition
 from dreamcoder.utilities import eprint, flatten, testTrainSplit, lse, runWithTimeout
 from dreamcoder.grammar import Grammar, ContextualGrammar
@@ -33,9 +33,10 @@ class EvaluationTimeout(Exception):
 
 
 class ArcTask(Task):
-    def __init__(self, name, request, examples, evalExamples, features=None, cache=False):
+    def __init__(self, name, request, examples, evalExamples, augmented_examples, features=None, cache=False):
         super().__init__(name, request, examples, features=features, cache=cache)
         self.evalExamples = evalExamples
+        self.augmented_examples = augmented_examples   #added
 
 
     def checkEvalExamples(self, e, timeout=None):
@@ -82,14 +83,13 @@ class ArcTask(Task):
                 signal.signal(signal.SIGVTALRM, lambda *_: None)
                 signal.setitimer(signal.ITIMER_VIRTUAL, 0)
 
-def retrieveARCJSONTasks(directory, filenames=None):
+def retrieveARCJSONTasks(directory, augmented_dir=None, filenames=None):
 
-    # directory = '/Users/theo/Development/program_induction/ec/ARC/data/training'
     data = []
 
     for filename in os.listdir(directory):
         if ("json" in filename):
-            task = retrieveARCJSONTask(filename, directory)
+            task = retrieveARCJSONTask(filename, directory,augmented_dir=augmented_dir)
             if filenames is not None:
                 if filename in filenames:
                     data.append(task)
@@ -98,7 +98,7 @@ def retrieveARCJSONTasks(directory, filenames=None):
     return data
 
 
-def retrieveARCJSONTask(filename, directory):
+def retrieveARCJSONTask(filename, directory,augmented_dir=None):
     with open(directory + "/" + filename, "r") as f:
         loaded = json.load(f)
 
@@ -110,12 +110,24 @@ def retrieveARCJSONTask(filename, directory):
             ((Grid(gridArray=example["input"]),), Grid(gridArray=example["output"]))
             for example in loaded["test"]
         ]
+    
+    ######### I've added ################################################################################
 
+
+    with open(augmented_dir + "/" + f"augmented_{filename}", "r") as f:
+        loaded = json.load(f)
+
+    augmentedExamples = [
+            ((Grid(gridArray=example["input"]),), Grid(gridArray=example["output"]))
+            for example in loaded["train"]
+        ]
+    
+    ######################################################################################################
     task = ArcTask(
         filename,
         arrow(tgridin, tgridout),
         ioExamples,
-        evalExamples
+        evalExamples,augmentedExamples    # changed
     )
     task.specialTask = ('arc', 5)
     return task
@@ -178,41 +190,66 @@ class ArcCNN(nn.Module):
         def conv_block(in_channels, out_channels):
             return nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, 3, padding=1),
-                # nn.BatchNorm2d(out_channels),
+                #nn.BatchNorm2d(out_channels),
                 nn.ReLU(),
-                nn.MaxPool2d(2)
             )
 
         self.gridDimension = 30
 
         # channels for hidden
         hid_dim = 64
-        z_dim = 64
+        z_dim = 128
 
         self.encoder = nn.Sequential(
-            conv_block(22, hid_dim),
-            conv_block(hid_dim, hid_dim),
-            conv_block(hid_dim, hid_dim),
-            conv_block(hid_dim, z_dim),
-            Flatten()
+            conv_block(10,hid_dim),
+            conv_block(hid_dim,hid_dim),
+            conv_block(hid_dim,z_dim),
+            nn.AdaptiveAvgPool2d((1, 1))
         )
+            
 
+    
     def forward(self, v):
-        """ """
+        v_all = None
         assert v.shape == (v.shape[0], 22, self.gridDimension, self.gridDimension)
         v = variable(v, cuda=self.CUDA).float()
-        v = self.encoder(v)
-        return v.mean(dim=0)
+        for i in range(v.shape[0]):
+            inputTensor= v[i,1:11,:int(v[i,0,0,0]),:int(v[i,0,0,1])]
+            outputTensor = v[i,12:,:int(v[i,11,0,0]), :int(v[i,11,0,1])]
+            v_input = inputTensor.unsqueeze(0)
+            v_input = self.encoder(v_input)
+            v_input = v_input.squeeze()
+            v_output = outputTensor.unsqueeze(0)
+            v_output = self.encoder(v_output)
+            v_output = v_output.squeeze()
+            ioTensor = torch.cat([v_input, v_output], 0).unsqueeze(0)
+            if v_all is None:
+                v_all = ioTensor
+            else:
+                v_all = torch.cat([v_all, ioTensor], dim=0)
+        v_all = v_all.squeeze()
+        device = torch.device('cuda')
+        v_all = v_all.to(device)
+        linear_layer = nn.Linear(256,64).to(device)
+        v_all = linear_layer(v_all)
+        v_all = nn.ReLU()(v_all)
+        v_all = v_all.mean(dim=0)
+        return v_all
 
 
     def featuresOfTask(self, t):  # Take a task and returns [features]
         v = None
-        for example in t.examples:
+        for example in t.augmented_examples:
             inputGrid, outputGrid = example
             inputGrid = inputGrid[0]
-
+            inputTensor = inputGrid.to_tensor(inputGrid.getNumRows(), inputGrid.getNumCols())
+            outputTensor = outputGrid.to_tensor(outputGrid.getNumRows(), outputGrid.getNumCols())
             inputTensor = inputGrid.to_tensor(grid_height=30, grid_width=30)
             outputTensor = outputGrid.to_tensor(grid_height=30, grid_width=30)
+            #added code
+            inputTensor[0,0,0], inputTensor[0,0,1] = inputGrid.getNumRows(), inputGrid.getNumCols()
+            outputTensor[0,0,0], outputTensor[0,0,1] = outputGrid.getNumRows(), outputGrid  .getNumCols()
+            ####
             ioTensor = torch.cat([inputTensor, outputTensor], 0).unsqueeze(0)
 
             if v is None:
@@ -220,7 +257,7 @@ class ArcCNN(nn.Module):
             else:
                 v = torch.cat([v, ioTensor], dim=0)
         return self(v)
-
+    
     def taskOfProgram(self, p, tp):
         """
         For simplicitly we only use one example per task randomly sampled from
@@ -244,36 +281,13 @@ class ArcCNN(nn.Module):
             except: continue
         return None
 
-    # def customFeaturesOfTask(self, t):
-    #     v = None
-    #     for example in t.examples[-1:]:
-    #         inputGrid, outputGrid = example
-    #         inputGrid = inputGrid[0]
-
-    #         inputColors, outputColors = set(inputGrid.points.values()), set(outputGrid.points.values())
-    #         specialColorsInput = inputColors - outputColors
-    #         specialColorsInputVector = [int(i in specialColorsInput) for i in range(10)]
-    #         specialColorsOutput = outputColors - inputColors
-    #         specialColorsOutputVector = [int(i in specialColorsOutput) for i in range(10)]
-    #         changeDimensions = [int((inputGrid.getNumCols() != outputGrid.getNumCols()) or (inputGrid.getNumRows() != outputGrid.getNumRows()))]
-    #         useSplitBlocks = [int(((inputGrid.getNumCols()//outputGrid.getNumCols()) == 2) or ((inputGrid.getNumRows()//outputGrid.getNumRows()) == 2))]
-    #         fractionBlackBInput = [sum([c == 0 for c in inputGrid.points.values()]) / len(inputGrid.points)]
-    #         fractionBlackBOutput = [sum([c == 0 for c in outputGrid.points.values()]) / len(outputGrid.points)]
-    #         pixelWiseError = [0 if (changeDimensions[0] == 1) else (sum([outputGrid.points[key] == outputGrid.points[key] for key in outputGrid.points.keys()]) / len(outputGrid.points))]
-
-    #         finalVector = np.array([specialColorsInputVector + specialColorsOutputVector + changeDimensions + useSplitBlocks + fractionBlackBInput + fractionBlackBOutput + pixelWiseError]).astype(np.float32)
-    #         finalTensor = torch.from_numpy(finalVector)
-    #         # print(finalTensor)
-    #         if v is None:
-    #             v = finalTensor
-    #         else:
-    #             v = torch.cat([v, finalTensor], dim=0)
-    #     return self(v)
-
 
     def featuresOfTasks(self, ts, t2=None):  # Take a task and returns [features]
         """Takes the goal first; optionally also takes the current state second"""
         return [self.featuresOfTask(t) for t in ts]
+
+
+
 
 
 def main(args):
@@ -282,17 +296,7 @@ def main(args):
     trains/tests the model on manipulating sequences of numbers.
 
     """
-    # samples = {
-    #     "007bbfb7.json": _solve007bbfb7,
-    #     "c9e6f938.json": _solvec9e6f938,
-    #     "50cb2852.json": lambda grid: _solve50cb2852(grid)(8),
-    #     "fcb5c309.json": _solvefcb5c309,
-    #     "97999447.json": _solve97999447,
-    #     "f25fbde4.json": _solvef25fbde4,
-    #     "72ca375d.json": _solve72ca375d,
-    #     "5521c0d9.json": _solve5521c0d9,
-    #     "ce4f8723.json": _solvece4f8723,
-    # }
+
 
     import os
 
@@ -300,8 +304,9 @@ def main(args):
     dataDirectory = homeDirectory + "/arc_data/data/"
 
 
-    trainTasks = retrieveARCJSONTasks(dataDirectory + 'training', None)
-    holdoutTasks = retrieveARCJSONTasks(dataDirectory + 'evaluation')
+    #trainTasks = retrieveARCJSONTasks(dataDirectory + 'all_data', None)
+    trainTasks = retrieveARCJSONTasks('/home/jebari/ARC/new_version/arc_data/data/training', augmented_dir='/home/jebari/ARC/new_version/arc_data/data/augmented_data')
+    #holdoutTasks = retrieveARCJSONTasks(dataDirectory + 'evaluation')
 
     baseGrammar = Grammar.uniform(basePrimitives() + leafPrimitives())
     # print("base Grammar {}".format(baseGrammar))
@@ -318,5 +323,5 @@ def main(args):
         "dummy": DummyFeatureExtractor,
         "arcCNN": ArcCNN
     }[args.pop("featureExtractor")]
-
+    
     explorationCompression(baseGrammar, trainTasks, featureExtractor=featureExtractor, testingTasks=[], **args)

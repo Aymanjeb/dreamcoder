@@ -12,55 +12,50 @@ tsquares = tlist(tsquares)
 
 def leafPrimitives():
 
-return [
+    return [
 
-Primitive('1', tint, 1),
-Primitive('2', tint, 2),
-Primitive('3', tint, 3),
-Primitive('4', tint, 4),
-Primitive('5', tint, 5),
-Primitive('6', tint, 6),
-Primitive('7', tint, 7),
-Primitive('8', tint, 8),
-Primitive('9', tint, 9),
+    Primitive('1', tint, 1),
+    Primitive('2', tint, 2),
+    Primitive('3', tint, 3),
+    Primitive('4', tint, 4),
+    Primitive('5', tint, 5),
+    Primitive('6', tint, 6),
+    Primitive('7', tint, 7),
+    Primitive('8', tint, 8),
+    Primitive('9', tint, 9),
 
-Primitive('true', tbool, True),
-Primitive('false', tbool, False),
+    Primitive('true', tbool, True),
+    Primitive('false', tbool, False),
 
-Primitive("left", tdirection, "left"),
-Primitive("right", tdirection, "right"),
-Primitive("down", tdirection, "down"),
-Primitive("up", tdirection, "up"),
-Primitive('diagUL', tdirection, 'diagUL'),
-Primitive('diagDL', tdirection, 'diagDL'),
-Primitive('diagUR', tdirection, 'diagUR'),
-Primitive('diagDR', tdirection, 'diagDR'),
+    Primitive("left", tdirection, "left"),
+    Primitive("right", tdirection, "right"),
+    Primitive("down", tdirection, "down"),
+    Primitive("up", tdirection, "up"),
+    Primitive('diagUL', tdirection, 'diagUL'),
+    Primitive('diagDL', tdirection, 'diagDL'),
+    Primitive('diagUR', tdirection, 'diagUR'),
+    Primitive('diagDR', tdirection, 'diagDR'),
 
 
-Primitive("black", tcolor, _black),
-Primitive("blue", tcolor, _blue),
-Primitive("red", tcolor, _red),
-Primitive("green", tcolor, _green),
-Primitive("yellow", tcolor, _yellow),
-Primitive("grey", tcolor, _grey),
-Primitive("pink", tcolor, _pink),
-Primitive("orange", tcolor, _orange),
-Primitive("teal", tcolor, _teal),
-Primitive("maroon", tcolor, _maroon)
+    Primitive("black", tcolor, _black),
+    Primitive("blue", tcolor, _blue),
+    Primitive("red", tcolor, _red),
+    Primitive("green", tcolor, _green),
+    Primitive("yellow", tcolor, _yellow),
+    Primitive("grey", tcolor, _grey),
+    Primitive("pink", tcolor, _pink),
+    Primitive("orange", tcolor, _orange),
+    Primitive("teal", tcolor, _teal),
+    Primitive("maroon", tcolor, _maroon)
 
-]
+    ]
 
 def basePrimitives():
 
-return [
-
-##### tint #####
-
-    Primitive('isOdd', arrow(tint, tbool), lambda x: x%2 == 1, _) # (868de0fa),
-
-##### tblocks #####
-
-    # # arrow (tblocks, tblock)
+    return [
+    
+    Primitive('isOdd', arrow(tint, tbool), lambda x: x%2 == 1, _), # (868de0fa),
+        # # arrow (tblocks, tblock)
     Primitive('_head', arrow(tblocks, tblock), _head),
     Primitive('_mergeBlocks', arrow(tblocks, tblock),  _mergeBlocks),
     Primitive('_getListBlock', arrow(tblocks, tint, tblock), _getListBlock),

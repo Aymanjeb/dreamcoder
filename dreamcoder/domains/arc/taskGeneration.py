@@ -1,3 +1,4 @@
+import random, copy
 def replaceColors(inputGrid, colorMap):
     """
     Replaces colors in the inputGrid by the corresponding value in colorMap (where each item is (oldColor, newColor)).

@@ -16,6 +16,9 @@ from dreamcoder.translation import *
 import dreamcoder.test_joint_models as test_joint_models
 from dreamcoder.joint_models import *
 
+
+
+
 class ECResult():
     def __init__(self, _=None,
                  frontiersOverTime=None,
@@ -162,7 +165,7 @@ def ecIterator(grammar, tasks,
                addFullTaskMetrics=False,
                matrixRank=None,
                solver='ocaml',
-               compressor="ocaml",
+               compressor='ocaml',
                biasOptimal=True,
                contextual=True,
                testingTasks=[],
@@ -643,7 +646,7 @@ def ecIterator(grammar, tasks,
             topDownFrontiers, times = wake_generative(grammar, wakingTaskBatch,
                                                       solver=solver,
                                                       maximumFrontier=maximumFrontier,
-                                                      enumerationTimeout=unigramEnumerationTimeout,
+                                                      enumerationTimeout=28800,
                                                       CPUs=CPUs,
                                                       evaluationTimeout=evaluationTimeout,
                                                       max_mem_per_enumeration_thread=max_mem_per_enumeration_thread)
@@ -664,6 +667,20 @@ def ecIterator(grammar, tasks,
 
         eprint("Frontiers discovered top down: " + str(len(tasksHitTopDown)))
         eprint("Total frontiers: " + str(len([f for f in result.allFrontiers.values() if not f.empty])))
+
+
+
+        """
+        for t in result.allFrontiers.keys(): 
+            if not result.allFrontiers[t].empty :
+                file_path = f"Hits/trained_on_tasks.txt"
+                with open(file_path, 'a') as file:
+                    file.write(f"Task:{t}\n")
+                    file.write(f"{result.allFrontiers[t]}\n")
+        """
+
+
+
         if test_wake_generative_enumeration: yield result
         
         #### Recognition model round 0. No language.
@@ -994,6 +1011,16 @@ def default_wake_generative(grammar, tasks,
                                                    solver=solver,
                                                    evaluationTimeout=evaluationTimeout,
                                                    max_mem_per_enumeration_thread=max_mem_per_enumeration_thread)
+    from datetime import datetime
+
+    # Get the current time
+    current_time = datetime.now()
+
+    file_path = f"all_results/enumeration_results/output_{current_time}.txt"
+    with open(file_path, 'w') as file:
+        file.write("Generative model enumeration results:")
+        file.write(Frontier.describe(topDownFrontiers))
+    
     eprint("Generative model enumeration results:")
     eprint(Frontier.describe(topDownFrontiers))
     summaryStatistics("Generative model", [t for t in times.values() if t is not None])
@@ -1170,6 +1197,15 @@ def sleep_recognition(result, grammar, taskBatch, tasks, testingTasks, allFronti
     eprint(f"Currently using this much memory: {getThisMemoryUsage()}")
 
     """ Rescore and combine the frontiers across the ensemble of recognition models."""
+        # Get the current time
+    from datetime import datetime
+    current_time = datetime.now()
+
+    file_path = f"all_results/recognition_enumeration/results_{current_time}.txt"
+    with open(file_path, 'w') as file:
+        file.write("Recognition model enumeration results for the best recognizer.")
+        file.write(Frontier.describe(ensembleFrontiers[bestRecognizer]))
+
     eprint("Recognition model enumeration results for the best recognizer.")
     eprint(Frontier.describe(ensembleFrontiers[bestRecognizer]))
     summaryStatistics("Recognition model", ensembleTimes[bestRecognizer])
@@ -1246,7 +1282,7 @@ def commandlineArguments(_=None,
                          reuseRecognition=False,
                          CPUs=1,
                          solver='ocaml',
-                         compressor="ocaml",
+                         compressor='ocaml',
                          recognition_0=["examples"],
                          recognitionTimeout=None,
                          activation='relu',
